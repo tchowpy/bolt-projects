@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Wallet, CreditCard, Edit2, X } from 'lucide-react';
+import { Plus, Wallet, CreditCard, CreditCard as Edit2, X } from 'lucide-react';
 
 export function ProductManagement() {
   const [activeTab, setActiveTab] = useState('savings');
