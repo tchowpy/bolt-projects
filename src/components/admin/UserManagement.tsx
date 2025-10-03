@@ -329,14 +329,71 @@ function UserModal({ user, onClose, onSuccess }: { user: User | null; onClose: (
 }
 
 function RolesModal({ user, onClose }: { user: User; onClose: () => void }) {
-  const [roles, setRoles] = useState<string[]>(['administrator', 'loan_officer', 'teller', 'manager', 'auditor']);
-  const [userRoles, setUserRoles] = useState<string[]>(['teller']);
+  const [roles, setRoles] = useState<any[]>([]);
+  const [userRoleIds, setUserRoleIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const toggleRole = (role: string) => {
-    if (userRoles.includes(role)) {
-      setUserRoles(userRoles.filter(r => r !== role));
+  useEffect(() => {
+    loadRolesAndUserRoles();
+  }, []);
+
+  const loadRolesAndUserRoles = async () => {
+    try {
+      const { data: rolesData } = await supabase
+        .from('roles')
+        .select('*')
+        .order('name');
+
+      const { data: userRolesData } = await supabase
+        .from('user_roles')
+        .select('role_id')
+        .eq('user_id', user.id);
+
+      setRoles(rolesData || []);
+      setUserRoleIds((userRolesData || []).map(ur => ur.role_id));
+    } catch (error) {
+      console.error('Error loading roles:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleRole = (roleId: string) => {
+    if (userRoleIds.includes(roleId)) {
+      setUserRoleIds(userRoleIds.filter(id => id !== roleId));
     } else {
-      setUserRoles([...userRoles, role]);
+      setUserRoleIds([...userRoleIds, roleId]);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', user.id);
+
+      if (userRoleIds.length > 0) {
+        const newRoles = userRoleIds.map(roleId => ({
+          user_id: user.id,
+          role_id: roleId
+        }));
+
+        const { error } = await supabase
+          .from('user_roles')
+          .insert(newRoles);
+
+        if (error) throw error;
+      }
+
+      onClose();
+    } catch (error: any) {
+      console.error('Error saving roles:', error);
+      alert(error.message || 'Failed to save roles');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -356,40 +413,47 @@ function RolesModal({ user, onClose }: { user: User; onClose: () => void }) {
         </div>
 
         <div className="p-6 space-y-3">
-          {roles.map((role) => (
-            <div
-              key={role}
-              className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
-            >
-              <div>
-                <div className="font-medium text-gray-900 capitalize">{role.replace('_', ' ')}</div>
-                <div className="text-xs text-gray-500">Role permissions description</div>
-              </div>
-              <input
-                type="checkbox"
-                checked={userRoles.includes(role)}
-                onChange={() => toggleRole(role)}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             </div>
-          ))}
+          ) : roles.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No roles available</div>
+          ) : (
+            roles.map((role) => (
+              <div
+                key={role.id}
+                className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                <div>
+                  <div className="font-medium text-gray-900 capitalize">{role.name.replace('_', ' ')}</div>
+                  <div className="text-xs text-gray-500">{role.description || 'No description'}</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={userRoleIds.includes(role.id)}
+                  onChange={() => toggleRole(role.id)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+              </div>
+            ))
+          )}
         </div>
 
         <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            disabled={saving}
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
-            onClick={() => {
-              alert('Roles updated: ' + userRoles.join(', '));
-              onClose();
-            }}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            onClick={handleSave}
+            disabled={saving || loading}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
           >
-            Save Roles
+            {saving ? 'Saving...' : 'Save Roles'}
           </button>
         </div>
       </div>
