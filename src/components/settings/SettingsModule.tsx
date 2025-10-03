@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Settings, DollarSign, Globe, Bell, Lock, Database, Save } from 'lucide-react';
+import { Settings, DollarSign, Globe, Bell, Lock, Database, Save, AlertTriangle } from 'lucide-react';
 
 export function SettingsModule() {
   const [activeTab, setActiveTab] = useState('general');
@@ -9,6 +9,7 @@ export function SettingsModule() {
 
   const tabs = [
     { id: 'general', label: 'General', icon: Settings },
+    { id: 'alerts', label: 'Alert Thresholds', icon: AlertTriangle },
     { id: 'currency', label: 'Currency', icon: DollarSign },
     { id: 'localization', label: 'Localization', icon: Globe },
     { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -54,6 +55,7 @@ export function SettingsModule() {
           )}
 
           {activeTab === 'general' && <GeneralSettings setSaved={setSaved} />}
+          {activeTab === 'alerts' && <AlertThresholdSettings setSaved={setSaved} />}
           {activeTab === 'currency' && <CurrencySettings setSaved={setSaved} />}
           {activeTab === 'localization' && <LocalizationSettings setSaved={setSaved} />}
           {activeTab === 'notifications' && <NotificationSettings setSaved={setSaved} />}
@@ -596,6 +598,256 @@ function SecuritySettings({ setSaved }: any) {
         </button>
       </div>
     </div>
+  );
+}
+
+function AlertThresholdSettings({ setSaved }: any) {
+  const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState({
+    large_transaction_threshold: 5000000,
+    large_withdrawal_threshold: 3000000,
+    rapid_transaction_count: 3,
+    rapid_transaction_period_minutes: 60,
+    enable_large_transaction_alert: true,
+    enable_large_withdrawal_alert: true,
+    enable_rapid_transaction_alert: true,
+  });
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('alert_settings')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setSettings({
+          large_transaction_threshold: data.large_transaction_threshold,
+          large_withdrawal_threshold: data.large_withdrawal_threshold,
+          rapid_transaction_count: data.rapid_transaction_count,
+          rapid_transaction_period_minutes: data.rapid_transaction_period_minutes,
+          enable_large_transaction_alert: data.enable_large_transaction_alert,
+          enable_large_withdrawal_alert: data.enable_large_withdrawal_alert,
+          enable_rapid_transaction_alert: data.enable_rapid_transaction_alert,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading alert settings:', error);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data: existingSettings } = await supabase
+        .from('alert_settings')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      if (existingSettings) {
+        const { error } = await supabase
+          .from('alert_settings')
+          .update({
+            ...settings,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingSettings.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('alert_settings')
+          .insert(settings);
+
+        if (error) throw error;
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error) {
+      console.error('Error saving alert settings:', error);
+      alert('Failed to save settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return (value / 1000000).toFixed(1) + 'M';
+  };
+
+  return (
+    <form onSubmit={handleSave} className="space-y-6">
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+          System Alert Thresholds
+        </h3>
+        <p className="text-sm text-gray-600">
+          Configure automatic alert triggers for suspicious activities and transactions.
+        </p>
+      </div>
+
+      <div className="space-y-6">
+        <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="flex items-start gap-3 mb-4">
+            <input
+              type="checkbox"
+              checked={settings.enable_large_transaction_alert}
+              onChange={(e) =>
+                setSettings({ ...settings, enable_large_transaction_alert: e.target.checked })
+              }
+              className="mt-1"
+            />
+            <div className="flex-1">
+              <h4 className="font-medium text-gray-900">Large Transaction Alert</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Trigger alert when transaction amount exceeds threshold
+              </p>
+            </div>
+          </div>
+          <div className="ml-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Threshold Amount (XOF)
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="number"
+                value={settings.large_transaction_threshold}
+                onChange={(e) =>
+                  setSettings({ ...settings, large_transaction_threshold: parseFloat(e.target.value) })
+                }
+                disabled={!settings.enable_large_transaction_alert}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                step="100000"
+              />
+              <span className="text-sm text-gray-600 min-w-[80px]">
+                ≈ {formatCurrency(settings.large_transaction_threshold)} XOF
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="flex items-start gap-3 mb-4">
+            <input
+              type="checkbox"
+              checked={settings.enable_large_withdrawal_alert}
+              onChange={(e) =>
+                setSettings({ ...settings, enable_large_withdrawal_alert: e.target.checked })
+              }
+              className="mt-1"
+            />
+            <div className="flex-1">
+              <h4 className="font-medium text-gray-900">Large Withdrawal Alert</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Trigger alert when withdrawal amount exceeds threshold
+              </p>
+            </div>
+          </div>
+          <div className="ml-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Threshold Amount (XOF)
+            </label>
+            <div className="flex items-center gap-4">
+              <input
+                type="number"
+                value={settings.large_withdrawal_threshold}
+                onChange={(e) =>
+                  setSettings({ ...settings, large_withdrawal_threshold: parseFloat(e.target.value) })
+                }
+                disabled={!settings.enable_large_withdrawal_alert}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                step="100000"
+              />
+              <span className="text-sm text-gray-600 min-w-[80px]">
+                ≈ {formatCurrency(settings.large_withdrawal_threshold)} XOF
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="flex items-start gap-3 mb-4">
+            <input
+              type="checkbox"
+              checked={settings.enable_rapid_transaction_alert}
+              onChange={(e) =>
+                setSettings({ ...settings, enable_rapid_transaction_alert: e.target.checked })
+              }
+              className="mt-1"
+            />
+            <div className="flex-1">
+              <h4 className="font-medium text-gray-900">Rapid Transaction Pattern Alert</h4>
+              <p className="text-sm text-gray-600 mt-1">
+                Trigger alert when multiple transactions occur in short period
+              </p>
+            </div>
+          </div>
+          <div className="ml-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Number of Transactions
+              </label>
+              <input
+                type="number"
+                value={settings.rapid_transaction_count}
+                onChange={(e) =>
+                  setSettings({ ...settings, rapid_transaction_count: parseInt(e.target.value) })
+                }
+                disabled={!settings.enable_rapid_transaction_alert}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                min="2"
+                max="20"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Time Period (Minutes)
+              </label>
+              <input
+                type="number"
+                value={settings.rapid_transaction_period_minutes}
+                onChange={(e) =>
+                  setSettings({ ...settings, rapid_transaction_period_minutes: parseInt(e.target.value) })
+                }
+                disabled={!settings.enable_rapid_transaction_alert}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+                min="5"
+                max="1440"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Alert if {settings.rapid_transaction_count} or more transactions occur within{' '}
+                {settings.rapid_transaction_period_minutes} minutes
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+        <p className="text-sm text-gray-600">
+          Changes will apply to new transactions immediately
+        </p>
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+        >
+          <Save className="w-4 h-4" />
+          {loading ? 'Saving...' : 'Save Settings'}
+        </button>
+      </div>
+    </form>
   );
 }
 
