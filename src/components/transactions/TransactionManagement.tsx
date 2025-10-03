@@ -52,6 +52,33 @@ export function TransactionManagement() {
     return true;
   });
 
+  const handleExport = () => {
+    const csvData = filteredTransactions.map(t => ({
+      'Transaction #': t.transaction_number,
+      'Date': new Date(t.processed_at).toLocaleDateString(),
+      'Type': t.transaction_type,
+      'Client': t.clients ? `${t.clients.first_name} ${t.clients.last_name}` : '-',
+      'Client #': t.clients?.client_number || '-',
+      'Amount (CFA)': t.amount,
+      'Method': t.payment_method,
+      'Description': t.description || '-',
+    }));
+
+    const headers = Object.keys(csvData[0] || {});
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => headers.map(h => `"${row[h as keyof typeof row]}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `transactions_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   const stats = {
     total: transactions.length,
     deposits: transactions.filter(t => t.transaction_type === 'deposit').reduce((sum, t) => sum + Number(t.amount), 0),
@@ -66,9 +93,12 @@ export function TransactionManagement() {
           <h2 className="text-2xl font-bold text-gray-900">Transaction Management</h2>
           <p className="text-gray-600 mt-1">Monitor and manage all financial transactions</p>
         </div>
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+        <button
+          onClick={handleExport}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+        >
           <Download className="w-5 h-5" />
-          Export
+          Export CSV
         </button>
       </div>
 

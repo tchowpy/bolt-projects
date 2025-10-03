@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, CreditCard as Edit, MapPin, Phone, Mail } from 'lucide-react';
+import { Plus, Edit2, MapPin, Phone, Mail, Building2, X } from 'lucide-react';
 
 interface Agency {
   id: string;
@@ -17,6 +17,7 @@ export function AgencyManagement() {
   const [agencies, setAgencies] = useState<Agency[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingAgency, setEditingAgency] = useState<Agency | null>(null);
 
   useEffect(() => {
     loadAgencies();
@@ -99,8 +100,14 @@ export function AgencyManagement() {
             </div>
 
             <div className="mt-4 pt-4 border-t border-gray-200">
-              <button className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium">
-                <Edit className="w-4 h-4" />
+              <button
+                onClick={() => {
+                  setEditingAgency(agency);
+                  setShowModal(true);
+                }}
+                className="flex items-center gap-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
+                <Edit2 className="w-4 h-4" />
                 Edit Agency
               </button>
             </div>
@@ -116,19 +123,28 @@ export function AgencyManagement() {
       )}
 
       {showModal && (
-        <AddAgencyModal onClose={() => setShowModal(false)} onSuccess={loadAgencies} />
+        <AgencyModal
+          agency={editingAgency}
+          onClose={() => {
+            setShowModal(false);
+            setEditingAgency(null);
+          }}
+          onSuccess={loadAgencies}
+        />
       )}
     </div>
   );
 }
 
-function AddAgencyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function AgencyModal({ agency, onClose, onSuccess }: { agency: Agency | null; onClose: () => void; onSuccess: () => void }) {
+  const isEditing = !!agency;
   const [formData, setFormData] = useState({
-    code: '',
-    name: '',
-    address: '',
-    phone: '',
-    email: '',
+    code: agency?.code || '',
+    name: agency?.name || '',
+    address: agency?.address || '',
+    phone: agency?.phone || '',
+    email: agency?.email || '',
+    is_active: agency?.is_active ?? true,
   });
   const [loading, setLoading] = useState(false);
 
@@ -137,14 +153,24 @@ function AddAgencyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
     setLoading(true);
 
     try {
-      const { error } = await supabase.from('agencies').insert(formData);
+      if (isEditing) {
+        const { error } = await supabase
+          .from('agencies')
+          .update(formData)
+          .eq('id', agency.id);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('agencies').insert(formData);
+
+        if (error) throw error;
+      }
 
       onSuccess();
       onClose();
-    } catch (error) {
-      console.error('Error creating agency:', error);
+    } catch (error: any) {
+      console.error('Error saving agency:', error);
+      alert(error.message || 'Failed to save agency');
     } finally {
       setLoading(false);
     }
@@ -153,8 +179,13 @@ function AddAgencyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-xl font-bold text-gray-900">Add New Agency</h3>
+        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-900">
+            {isEditing ? 'Edit Agency' : 'Add New Agency'}
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -212,6 +243,19 @@ function AddAgencyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
             />
           </div>
 
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={formData.is_active}
+              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="is_active" className="ml-2 text-sm font-medium text-gray-700">
+              Active Agency
+            </label>
+          </div>
+
           <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
@@ -225,7 +269,7 @@ function AddAgencyModal({ onClose, onSuccess }: { onClose: () => void; onSuccess
               disabled={loading}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
             >
-              {loading ? 'Creating...' : 'Create Agency'}
+              {loading ? 'Saving...' : isEditing ? 'Update Agency' : 'Create Agency'}
             </button>
           </div>
         </form>
