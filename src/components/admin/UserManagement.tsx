@@ -29,7 +29,7 @@ export function UserManagement() {
   const loadUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('staff')
         .select('*, agencies(name)')
         .order('created_at', { ascending: false });
 
@@ -198,13 +198,13 @@ function UserModal({ user, onClose, onSuccess }: { user: User | null; onClose: (
     try {
       if (isEditing) {
         const { error } = await supabase
-          .from('users')
+          .from('staff')
           .update(formData)
           .eq('id', user.id);
 
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('users').insert(formData);
+        const { error } = await supabase.from('staff').insert(formData);
         if (error) throw error;
       }
 
