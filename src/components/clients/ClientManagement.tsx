@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Search, Edit, Eye, FileText, CheckCircle, XCircle, Trash2, X } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit, Eye, FileText, CheckCircle, XCircle, Trash2, X } from 'lucide-react';
 
 interface Client {
   id: string;
