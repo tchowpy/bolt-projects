@@ -17,6 +17,7 @@ export function SavingsManagement() {
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showNewAccountModal, setShowNewAccountModal] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<SavingsAccount | null>(null);
 
   useEffect(() => {
@@ -49,7 +50,10 @@ export function SavingsManagement() {
           <h2 className="text-2xl font-bold text-gray-900">Savings Management</h2>
           <p className="text-gray-600 mt-1">Manage client savings accounts</p>
         </div>
-        <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors">
+        <button
+          onClick={() => setShowNewAccountModal(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+        >
           <Plus className="w-5 h-5" />
           New Account
         </button>
@@ -152,6 +156,157 @@ export function SavingsManagement() {
           onSuccess={loadSavingsAccounts}
         />
       )}
+
+      {showNewAccountModal && (
+        <NewAccountModal
+          onClose={() => setShowNewAccountModal(false)}
+          onSuccess={loadSavingsAccounts}
+        />
+      )}
+    </div>
+  );
+}
+
+function NewAccountModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [clients, setClients] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [formData, setFormData] = useState({
+    client_id: '',
+    product_id: '',
+    initial_deposit: '',
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadClientsAndProducts();
+  }, []);
+
+  const loadClientsAndProducts = async () => {
+    const [clientsRes, productsRes] = await Promise.all([
+      supabase.from('clients').select('id, client_number, first_name, last_name').eq('is_active', true).order('first_name'),
+      supabase.from('savings_products').select('*').eq('is_active', true),
+    ]);
+    setClients(clientsRes.data || []);
+    setProducts(productsRes.data || []);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const accountNumber = `SAV${Date.now()}`;
+      const initialDeposit = parseFloat(formData.initial_deposit);
+
+      const { error: accountError } = await supabase.from('savings_accounts').insert({
+        account_number: accountNumber,
+        client_id: formData.client_id,
+        product_id: formData.product_id,
+        balance: initialDeposit,
+        interest_earned: 0,
+        status: 'active',
+        opened_date: new Date().toISOString().split('T')[0],
+      });
+
+      if (accountError) throw accountError;
+
+      if (initialDeposit > 0) {
+        const { data: currencyData } = await supabase.from('currencies').select('id').eq('code', 'XOF').single();
+        await supabase.from('transactions').insert({
+          transaction_number: `TXN${Date.now()}`,
+          transaction_type: 'deposit',
+          amount: initialDeposit,
+          currency_id: currencyData?.id,
+          client_id: formData.client_id,
+          payment_method: 'cash',
+          description: 'Initial deposit for new savings account',
+        });
+      }
+
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      console.error('Error creating account:', error);
+      alert(error.message || 'Failed to create account');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-xl font-bold text-gray-900">New Savings Account</h3>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Client *</label>
+            <select
+              required
+              value={formData.client_id}
+              onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Select a client</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.client_number} - {client.first_name} {client.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Savings Product *</label>
+            <select
+              required
+              value={formData.product_id}
+              onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Select a product</option>
+              {products.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name} ({product.interest_rate}% interest)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Initial Deposit (CFA) *</label>
+            <input
+              type="number"
+              required
+              min="0"
+              step="0.01"
+              value={formData.initial_deposit}
+              onChange={(e) => setFormData({ ...formData, initial_deposit: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Enter initial deposit amount"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Creating...' : 'Create Account'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
