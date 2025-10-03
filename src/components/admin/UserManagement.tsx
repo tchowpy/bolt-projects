@@ -179,6 +179,7 @@ function UserModal({ user, onClose, onSuccess }: { user: User | null; onClose: (
     phone: user?.phone || '',
     agency_id: user?.agency_id || '',
     is_active: user?.is_active ?? true,
+    password: '',
   });
   const [loading, setLoading] = useState(false);
 
@@ -197,15 +198,61 @@ function UserModal({ user, onClose, onSuccess }: { user: User | null; onClose: (
 
     try {
       if (isEditing) {
+        const updateData = {
+          email: formData.email,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          phone: formData.phone,
+          agency_id: formData.agency_id,
+          is_active: formData.is_active,
+        };
+
         const { error } = await supabase
           .from('staff')
-          .update(formData)
+          .update(updateData)
           .eq('id', user.id);
 
         if (error) throw error;
+
+        if (formData.password) {
+          const { error: authError } = await supabase.auth.admin.updateUserById(
+            user.id,
+            { password: formData.password }
+          );
+          if (authError) {
+            console.error('Warning: Could not update password:', authError.message);
+          }
+        }
       } else {
-        const { error } = await supabase.from('staff').insert(formData);
-        if (error) throw error;
+        if (!formData.password) {
+          throw new Error('Password is required for new users');
+        }
+
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              first_name: formData.first_name,
+              last_name: formData.last_name,
+            }
+          }
+        });
+
+        if (authError) throw authError;
+        if (!authData.user) throw new Error('Failed to create auth user');
+
+        const { error: staffError } = await supabase.from('staff').insert({
+          id: authData.user.id,
+          email: formData.email,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          phone: formData.phone,
+          agency_id: formData.agency_id,
+          is_active: formData.is_active,
+        });
+
+        if (staffError) throw staffError;
       }
 
       onSuccess();
@@ -290,6 +337,22 @@ function UserModal({ user, onClose, onSuccess }: { user: User | null; onClose: (
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password {isEditing ? '(leave blank to keep current)' : '*'}
+              </label>
+              <input
+                type="password"
+                required={!isEditing}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder={isEditing ? 'Enter new password to change' : 'Enter password'}
+                minLength={6}
+              />
+              <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
             </div>
           </div>
 

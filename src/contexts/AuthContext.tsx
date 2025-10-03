@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .limit(1)
         .single();
 
-      const { error: profileError } = await supabase.from('users').insert({
+      const { error: profileError } = await supabase.from('staff').insert({
         id: data.user.id,
         email,
         first_name: userData.firstName,
