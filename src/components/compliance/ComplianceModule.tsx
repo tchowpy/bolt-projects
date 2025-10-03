@@ -410,7 +410,7 @@ function NewCheckModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
     const { data } = await supabase
       .from('clients')
       .select('id, first_name, last_name, client_number')
-      .eq('status', 'active')
+      .eq('is_active', true)
       .order('first_name');
     setClients(data || []);
   };
