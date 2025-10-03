@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Users, Edit2, Eye, X, User, MapPin, Calendar } from 'lucide-react';
+import { Plus, Users, CreditCard as Edit2, Eye, X, User, MapPin, Calendar } from 'lucide-react';
 
 interface Group {
   id: string;
