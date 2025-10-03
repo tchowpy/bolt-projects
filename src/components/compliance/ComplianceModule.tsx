@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Shield, AlertTriangle, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Shield, AlertTriangle, CheckCircle, XCircle, Clock, Plus, X } from 'lucide-react';
 
 interface ComplianceCheck {
   id: string;
@@ -31,6 +31,7 @@ export function ComplianceModule() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('checks');
+  const [showNewCheckModal, setShowNewCheckModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -108,19 +109,30 @@ export function ComplianceModule() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="border-b border-gray-200">
-          <nav className="flex space-x-1 p-2">
-            <TabButton
-              active={activeTab === 'checks'}
-              onClick={() => setActiveTab('checks')}
-              label="Compliance Checks"
-            />
-            <TabButton
-              active={activeTab === 'alerts'}
-              onClick={() => setActiveTab('alerts')}
-              label="System Alerts"
-              badge={alerts.length}
-            />
-          </nav>
+          <div className="flex items-center justify-between p-2">
+            <nav className="flex space-x-1">
+              <TabButton
+                active={activeTab === 'checks'}
+                onClick={() => setActiveTab('checks')}
+                label="Compliance Checks"
+              />
+              <TabButton
+                active={activeTab === 'alerts'}
+                onClick={() => setActiveTab('alerts')}
+                label="System Alerts"
+                badge={alerts.length}
+              />
+            </nav>
+            {activeTab === 'checks' && (
+              <button
+                onClick={() => setShowNewCheckModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                New Check
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="p-6">
@@ -136,6 +148,16 @@ export function ComplianceModule() {
           )}
         </div>
       </div>
+
+      {showNewCheckModal && (
+        <NewCheckModal
+          onClose={() => setShowNewCheckModal(false)}
+          onSuccess={() => {
+            setShowNewCheckModal(false);
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -367,4 +389,168 @@ function SeverityIcon({ severity }: { severity: string }) {
   };
 
   return icons[severity] || icons.low;
+}
+
+function NewCheckModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [clients, setClients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    client_id: '',
+    check_type: 'kyc',
+    status: 'pending',
+    score: '',
+    details: '',
+  });
+
+  useEffect(() => {
+    loadClients();
+  }, []);
+
+  const loadClients = async () => {
+    const { data } = await supabase
+      .from('clients')
+      .select('id, first_name, last_name, client_number')
+      .eq('status', 'active')
+      .order('first_name');
+    setClients(data || []);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const checkData: any = {
+        client_id: formData.client_id,
+        check_type: formData.check_type,
+        status: formData.status,
+        details: formData.details ? JSON.parse(`{"note": "${formData.details}"}`) : null,
+      };
+
+      if (formData.score) {
+        checkData.score = parseInt(formData.score);
+      }
+
+      if (formData.status !== 'pending') {
+        checkData.checked_at = new Date().toISOString();
+      }
+
+      const { error } = await supabase.from('compliance_checks').insert(checkData);
+
+      if (error) throw error;
+      onSuccess();
+    } catch (error: any) {
+      console.error('Error creating check:', error);
+      alert('Error: ' + (error.message || 'Failed to create check'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="text-xl font-bold text-gray-900">New Compliance Check</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Client *</label>
+            <select
+              required
+              value={formData.client_id}
+              onChange={(e) => setFormData({ ...formData, client_id: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Client</option>
+              {clients.map((client) => (
+                <option key={client.id} value={client.id}>
+                  {client.client_number} - {client.first_name} {client.last_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Check Type *</label>
+            <select
+              required
+              value={formData.check_type}
+              onChange={(e) => setFormData({ ...formData, check_type: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="kyc">KYC Verification</option>
+              <option value="aml">AML Screening</option>
+              <option value="credit_score">Credit Score</option>
+              <option value="document_verification">Document Verification</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Status *</label>
+            <select
+              required
+              value={formData.status}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="pending">Pending</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="review_required">Review Required</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Score (0-100)
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={formData.score}
+              onChange={(e) => setFormData({ ...formData, score: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Optional"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Details/Notes
+            </label>
+            <textarea
+              value={formData.details}
+              onChange={(e) => setFormData({ ...formData, details: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              rows={3}
+              placeholder="Optional notes"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Creating...' : 'Create Check'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
