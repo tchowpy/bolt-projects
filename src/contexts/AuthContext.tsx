@@ -58,17 +58,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (!error && data.user) {
+      const { data: agencyData } = await supabase
+        .from('agencies')
+        .select('id')
+        .limit(1)
+        .single();
+
       const { error: profileError } = await supabase.from('users').insert({
         id: data.user.id,
         email,
         first_name: userData.firstName,
         last_name: userData.lastName,
         phone: userData.phone,
-        agency_id: userData.agencyId,
+        agency_id: agencyData?.id || userData.agencyId,
+        is_active: true,
       });
 
       if (profileError) {
-        return { error: profileError as unknown as AuthError };
+        console.error('Error creating user profile:', profileError);
       }
     }
 
