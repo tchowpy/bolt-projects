@@ -54,7 +54,7 @@ function AppContent() {
       <Sidebar activeModule={activeModule} onModuleChange={setActiveModule} />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header title={moduleTitle} />
+        <Header title={moduleTitle} onNavigate={setActiveModule} />
 
         <main className="flex-1 overflow-y-auto p-6">
           {activeModule === 'dashboard' && <DashboardOverview />}

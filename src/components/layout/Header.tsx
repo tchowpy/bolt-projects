@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface HeaderProps {
   title: string;
+  onNavigate?: (module: string) => void;
 }
 
 interface Notification {
@@ -16,7 +17,7 @@ interface Notification {
   severity: string;
 }
 
-export function Header({ title }: HeaderProps) {
+export function Header({ title, onNavigate }: HeaderProps) {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -160,6 +161,15 @@ export function Header({ title }: HeaderProps) {
                       onClick={() => {
                         setShowSearchResults(false);
                         setSearchTerm('');
+                        if (onNavigate) {
+                          if (result.type === 'Client') {
+                            onNavigate('clients');
+                          } else if (result.type === 'Loan') {
+                            onNavigate('loans');
+                          } else if (result.type === 'Savings') {
+                            onNavigate('savings');
+                          }
+                        }
                       }}
                       className="w-full text-left p-3 hover:bg-gray-50 rounded-lg transition-colors"
                     >
@@ -272,6 +282,9 @@ export function Header({ title }: HeaderProps) {
                   <button
                     onClick={() => {
                       setShowAccountMenu(false);
+                      if (onNavigate) {
+                        onNavigate('settings');
+                      }
                     }}
                     className="w-full flex items-center gap-3 p-3 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
                   >

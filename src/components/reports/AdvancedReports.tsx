@@ -65,8 +65,13 @@ export function AdvancedReports() {
   ];
 
   const handleGenerateReport = async () => {
-    if (!selectedReport || !dateRange.start || !dateRange.end) {
-      alert('Please select a report and date range');
+    if (!selectedReport) {
+      alert('Please select a report');
+      return;
+    }
+
+    if (!dateRange.start || !dateRange.end) {
+      alert('Please select start and end dates');
       return;
     }
 
@@ -75,6 +80,8 @@ export function AdvancedReports() {
     try {
       let data: any[] = [];
       let filename = selectedReport;
+
+      console.log('Generating report:', selectedReport, 'Date range:', dateRange);
 
       switch (selectedReport) {
         case 'balance_sheet':
@@ -114,16 +121,25 @@ export function AdvancedReports() {
           data = await generateGenericReport();
       }
 
+      console.log('Report data generated:', data.length, 'rows');
+
+      if (data.length === 0) {
+        alert('No data available for this report. Try a different date range or ensure you have data in the system.');
+        return;
+      }
+
       if (exportFormat === 'csv') {
         downloadCSV(data, filename);
       } else if (exportFormat === 'excel') {
-        alert('Excel export: ' + data.length + ' rows would be exported');
+        alert('Excel export ready: ' + data.length + ' rows. CSV export is currently available.');
+        downloadCSV(data, filename);
       } else {
-        alert('PDF export: Report would be generated with ' + data.length + ' rows');
+        alert('PDF export ready: ' + data.length + ' rows. CSV export is currently available.');
+        downloadCSV(data, filename);
       }
     } catch (error: any) {
       console.error('Error generating report:', error);
-      alert('Error generating report: ' + error.message);
+      alert('Error generating report: ' + (error.message || 'Unknown error'));
     } finally {
       setGenerating(false);
     }
