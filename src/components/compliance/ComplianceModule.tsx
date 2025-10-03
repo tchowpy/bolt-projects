@@ -130,7 +130,7 @@ export function ComplianceModule() {
             </div>
           ) : (
             <>
-              {activeTab === 'checks' && <ComplianceChecksTable checks={checks} />}
+              {activeTab === 'checks' && <ComplianceChecksTable checks={checks} onReload={loadData} />}
               {activeTab === 'alerts' && <AlertsTable alerts={alerts} onResolve={loadData} />}
             </>
           )}
@@ -172,7 +172,34 @@ function TabButton({ active, onClick, label, badge }: any) {
   );
 }
 
-function ComplianceChecksTable({ checks }: { checks: ComplianceCheck[] }) {
+function ComplianceChecksTable({ checks, onReload }: { checks: ComplianceCheck[]; onReload?: () => void }) {
+  const handleApprove = async (checkId: string) => {
+    try {
+      const { error } = await supabase
+        .from('compliance_checks')
+        .update({ status: 'passed', checked_at: new Date().toISOString() })
+        .eq('id', checkId);
+
+      if (error) throw error;
+      if (onReload) onReload();
+    } catch (error) {
+      console.error('Error approving check:', error);
+    }
+  };
+
+  const handleReject = async (checkId: string) => {
+    try {
+      const { error } = await supabase
+        .from('compliance_checks')
+        .update({ status: 'failed', checked_at: new Date().toISOString() })
+        .eq('id', checkId);
+
+      if (error) throw error;
+      if (onReload) onReload();
+    } catch (error) {
+      console.error('Error rejecting check:', error);
+    }
+  };
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -183,6 +210,7 @@ function ComplianceChecksTable({ checks }: { checks: ComplianceCheck[] }) {
             <th className="text-left py-3 px-4 font-semibold text-gray-700">Score</th>
             <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
             <th className="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
+            <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -211,6 +239,26 @@ function ComplianceChecksTable({ checks }: { checks: ComplianceCheck[] }) {
               </td>
               <td className="py-3 px-4 text-gray-600 text-sm">
                 {check.checked_at ? new Date(check.checked_at).toLocaleDateString() : 'Pending'}
+              </td>
+              <td className="py-3 px-4">
+                {check.status === 'pending' || check.status === 'review_required' ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleApprove(check.id)}
+                      className="px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded text-xs font-medium transition-colors"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleReject(check.id)}
+                      className="px-3 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-xs font-medium transition-colors"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400">Completed</span>
+                )}
               </td>
             </tr>
           ))}
