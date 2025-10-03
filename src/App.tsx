@@ -14,6 +14,8 @@ import { TransactionManagement } from './components/transactions/TransactionMana
 import { AdminModule } from './components/admin/AdminModule';
 import { ProductManagement } from './components/products/ProductManagement';
 import { ComplianceModule } from './components/compliance/ComplianceModule';
+import { GroupManagement } from './components/groups/GroupManagement';
+import { SettingsModule } from './components/settings/SettingsModule';
 
 function AppContent() {
   const { user, loading } = useAuth();
@@ -66,8 +68,8 @@ function AppContent() {
           {activeModule === 'admin' && <AdminModule />}
           {activeModule === 'products' && <ProductManagement />}
           {activeModule === 'compliance' && <ComplianceModule />}
-          {activeModule === 'groups' && <PlaceholderModule title="Group Management" />}
-          {activeModule === 'settings' && <PlaceholderModule title="Settings" />}
+          {activeModule === 'groups' && <GroupManagement />}
+          {activeModule === 'settings' && <SettingsModule />}
         </main>
       </div>
     </div>
