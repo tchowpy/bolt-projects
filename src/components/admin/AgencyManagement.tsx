@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Edit2, MapPin, Phone, Mail, Building2, X } from 'lucide-react';
+import { Plus, CreditCard as Edit2, MapPin, Phone, Mail, Building2, X } from 'lucide-react';
 
 interface Agency {
   id: string;
