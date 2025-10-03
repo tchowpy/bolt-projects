@@ -21,6 +21,8 @@ export function RoleManagement() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [rolePermissions, setRolePermissions] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -38,12 +40,81 @@ export function RoleManagement() {
 
       setRoles(rolesResult.data || []);
       setPermissions(permissionsResult.data || []);
+
+      if (rolesResult.data && rolesResult.data.length > 0) {
+        setSelectedRole(rolesResult.data[0]);
+      }
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const loadRolePermissions = async (roleId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('role_permissions')
+        .select('permission_id')
+        .eq('role_id', roleId);
+
+      if (error) throw error;
+      setRolePermissions((data || []).map(rp => rp.permission_id));
+    } catch (error) {
+      console.error('Error loading role permissions:', error);
+    }
+  };
+
+  const handleRoleSelect = (role: Role) => {
+    setSelectedRole(role);
+    loadRolePermissions(role.id);
+  };
+
+  const togglePermission = (permissionId: string) => {
+    if (rolePermissions.includes(permissionId)) {
+      setRolePermissions(rolePermissions.filter(id => id !== permissionId));
+    } else {
+      setRolePermissions([...rolePermissions, permissionId]);
+    }
+  };
+
+  const handleSavePermissions = async () => {
+    if (!selectedRole) return;
+
+    setSaving(true);
+    try {
+      await supabase
+        .from('role_permissions')
+        .delete()
+        .eq('role_id', selectedRole.id);
+
+      if (rolePermissions.length > 0) {
+        const newPermissions = rolePermissions.map(permissionId => ({
+          role_id: selectedRole.id,
+          permission_id: permissionId
+        }));
+
+        const { error } = await supabase
+          .from('role_permissions')
+          .insert(newPermissions);
+
+        if (error) throw error;
+      }
+
+      alert('Permissions saved successfully!');
+    } catch (error: any) {
+      console.error('Error saving permissions:', error);
+      alert(error.message || 'Failed to save permissions');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRole) {
+      loadRolePermissions(selectedRole.id);
+    }
+  }, [selectedRole]);
 
   const groupedPermissions = permissions.reduce((acc, perm) => {
     if (!acc[perm.module]) {
@@ -76,7 +147,7 @@ export function RoleManagement() {
               {roles.map((role) => (
                 <button
                   key={role.id}
-                  onClick={() => setSelectedRole(role)}
+                  onClick={() => handleRoleSelect(role)}
                   className={`w-full text-left p-3 rounded-lg transition-all ${
                     selectedRole?.id === role.id
                       ? 'bg-blue-600 text-white'
@@ -125,13 +196,14 @@ export function RoleManagement() {
                         >
                           <input
                             type="checkbox"
-                            defaultChecked={Math.random() > 0.5}
+                            checked={rolePermissions.includes(perm.id)}
+                            onChange={() => togglePermission(perm.id)}
                             disabled={selectedRole.is_system}
                             className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                           />
                           <div className="flex-1">
                             <div className="font-medium text-gray-900 text-sm capitalize">
-                              {perm.action}
+                              {perm.action.replace('_', ' ')}
                             </div>
                             <div className="text-xs text-gray-500">{perm.description}</div>
                           </div>
@@ -143,9 +215,16 @@ export function RoleManagement() {
               </div>
 
               {!selectedRole.is_system && (
-                <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
-                  <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
-                    Save Permissions
+                <div className="mt-6 pt-6 border-t border-gray-200 flex justify-between items-center">
+                  <div className="text-sm text-gray-600">
+                    {rolePermissions.length} permission(s) selected
+                  </div>
+                  <button
+                    onClick={handleSavePermissions}
+                    disabled={saving}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Permissions'}
                   </button>
                 </div>
               )}
