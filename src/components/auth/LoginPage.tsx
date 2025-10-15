@@ -184,29 +184,6 @@ export function LoginPage() {
               </button>
             </form>
           )}
-
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => {
-                setShowSignUp(!showSignUp);
-                setError('');
-                setSuccess('');
-              }}
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-2 mx-auto"
-            >
-              {showSignUp ? (
-                <>
-                  <LogIn className="w-4 h-4" />
-                  Already have an account? Sign In
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4" />
-                  Need an account? Sign Up
-                </>
-              )}
-            </button>
-          </div>
         </div>
       </div>
     </div>

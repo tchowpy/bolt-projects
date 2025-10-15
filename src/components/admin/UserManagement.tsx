@@ -10,6 +10,7 @@ interface User {
   phone: string;
   is_active: boolean;
   agencies: {
+    id: string;
     name: string;
   };
 }
