@@ -12,7 +12,7 @@ export function AdminModule() {
     { id: 'agencies', label: 'Agencies', icon: Building2 },
     { id: 'users', label: 'Users', icon: Users },
     { id: 'roles', label: 'Roles & Permissions', icon: Shield },
-    { id: 'settings', label: 'System Settings', icon: SettingsIcon },
+   // { id: 'settings', label: 'System Settings', icon: SettingsIcon },
   ];
 
   return (

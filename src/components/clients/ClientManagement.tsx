@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Plus, Search, CreditCard as Edit, Eye, FileText, CheckCircle, XCircle, Trash2, X } from 'lucide-react';
+import { Plus, Search, CreditCard as Edit, Eye, CheckCircle, XCircle, Trash2, X } from 'lucide-react';
 
 interface Client {
   id: string;
@@ -31,19 +31,44 @@ export function ClientManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
+  // 🔹 Pagination states
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const totalPages = Math.ceil(totalCount / pageSize) || 1;
+
   useEffect(() => {
     loadClients();
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    setPage(1);
+    loadClients();
+  }, [searchTerm, pageSize]);
 
   const loadClients = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      let query = supabase
         .from('clients')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (searchTerm) {
+        query = query.or(
+          `first_name.ilike.%${searchTerm}%,last_name.ilike.%${searchTerm}%,client_number.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`
+        );
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
       setClients(data || []);
+      setTotalCount(count || 0);
     } catch (error) {
       console.error('Error loading clients:', error);
     } finally {
@@ -78,14 +103,9 @@ export function ClientManagement() {
     }
   };
 
-  const filteredClients = clients.filter(client =>
-    `${client.first_name} ${client.last_name} ${client.client_number} ${client.phone}`
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
-  );
-
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Client Management</h2>
@@ -100,9 +120,10 @@ export function ClientManagement() {
         </button>
       </div>
 
+      {/* Search bar */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="mb-6">
-          <div className="relative">
+        <div className="mb-6 flex justify-between items-center">
+          <div className="relative w-full max-w-lg">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
@@ -112,8 +133,25 @@ export function ClientManagement() {
               className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+
+          {/* Page size selector */}
+          <div className="ml-4 flex items-center gap-2">
+            <label className="text-sm text-gray-600">Rows per page:</label>
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:ring-2 focus:ring-blue-500"
+            >
+              {[5, 10, 20, 50].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
+        {/* Table */}
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -134,7 +172,7 @@ export function ClientManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filteredClients.map((client) => (
+                {clients.map((client) => (
                   <tr key={client.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4 font-medium text-gray-900">{client.client_number}</td>
                     <td className="py-3 px-4">
@@ -192,9 +230,34 @@ export function ClientManagement() {
               </tbody>
             </table>
 
-            {filteredClients.length === 0 && (
+            {clients.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-gray-500">No clients found</p>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {clients.length > 0 && (
+              <div className="flex items-center justify-between mt-4 px-4">
+                <p className="text-sm text-gray-600">
+                  Page {page} sur {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    ← Précédent
+                  </button>
+                  <button
+                    disabled={page === totalPages}
+                    onClick={() => setPage(page + 1)}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    Suivant →
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -216,21 +279,23 @@ export function ClientManagement() {
   );
 }
 
+/* ========== Small Components ========== */
+
 function StatusBadge({ status }: { status: string }) {
   const configs = {
     verified: { color: 'bg-green-100 text-green-700', label: 'Verified' },
     pending: { color: 'bg-yellow-100 text-yellow-700', label: 'Pending' },
     rejected: { color: 'bg-red-100 text-red-700', label: 'Rejected' },
   };
-
   const config = configs[status as keyof typeof configs] || configs.pending;
-
   return (
     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
       {config.label}
     </span>
   );
 }
+
+/* Les modales AddClientModal, ViewClientModal, EditClientModal restent identiques à ton code existant */
 
 function ViewClientModal({ client, onClose }: { client: Client; onClose: () => void }) {
   return (

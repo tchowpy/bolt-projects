@@ -29,33 +29,80 @@ export function LoanManagement() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10); // <-- sélectionnable 5/10/20/50
+  const [totalCount, setTotalCount] = useState(0);
+
   const [showNewLoanModal, setShowNewLoanModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
 
+  // recalculer quand page, pageSize, statusFilter ou searchQuery changent
   useEffect(() => {
     loadLoans();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page]);
+
+  // si search/status/pageSize change -> revenir à la page 1
+  useEffect(() => {
+    setPage(1);
+    loadLoans();
+  }, [searchQuery, statusFilter, pageSize]);
 
   const loadLoans = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      let query = supabase
         .from('loans')
-        .select(`
+        .select(
+          `
           *,
           clients (first_name, last_name, client_number),
           loan_products (name)
-        `)
-        .order('created_at', { ascending: false });
+        `,
+          { count: 'exact' }
+        )
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      // Filtre par statut
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      }
+
+      // Recherche générique (loan_number, client names/number, product name)
+      if (searchQuery.trim() !== '') {
+        const q = `%${searchQuery.trim()}%`;
+        // Utilisation de or avec ilike sur les champs relationnels
+        query = query.or(
+          `loan_number.ilike.${q},clients.first_name.ilike.${q},clients.last_name.ilike.${q},clients.client_number.ilike.${q},loan_products.name.ilike.${q}`
+        );
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
+
       setLoans(data || []);
+      setTotalCount(typeof count === 'number' ? count : 0);
     } catch (error) {
       console.error('Error loading loans:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1) return;
+    if (newPage > totalPages) return;
+    setPage(newPage);
   };
 
   const handleApprove = async (loan: Loan) => {
@@ -124,12 +171,8 @@ export function LoanManagement() {
     setShowPaymentModal(true);
   };
 
-  const filteredLoans = statusFilter === 'all'
-    ? loans
-    : loans.filter(l => l.status === statusFilter);
-
   const stats = {
-    total: loans.length,
+    total: totalCount,
     active: loans.filter(l => l.status === 'active').length,
     pending: loans.filter(l => l.status === 'pending').length,
     totalAmount: loans.reduce((sum, l) => sum + Number(l.outstanding_balance || 0), 0),
@@ -137,6 +180,7 @@ export function LoanManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Loan Management</h2>
@@ -151,6 +195,7 @@ export function LoanManagement() {
         </button>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard label="Total Loans" value={stats.total.toString()} icon={CreditCard} color="bg-blue-500" />
         <StatCard label="Active Loans" value={stats.active.toString()} icon={Check} color="bg-green-500" />
@@ -163,98 +208,151 @@ export function LoanManagement() {
         />
       </div>
 
+      {/* Filters + Search + PageSize selector */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="mb-4">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Loans</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="disbursed">Disbursed</option>
-            <option value="active">Active</option>
-            <option value="closed">Closed</option>
-            <option value="rejected">Rejected</option>
-          </select>
+        <div className="mb-6 flex justify-between items-center">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); /* page reset handled by effect */ }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">All Loans</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="disbursed">Disbursed</option>
+              <option value="active">Active</option>
+              <option value="closed">Closed</option>
+              <option value="rejected">Rejected</option>
+            </select>
+
+            <input
+              type="text"
+              placeholder="Search loans, clients, products..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); /* page reset handled by effect */ }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full md:w-80"
+            />
+            
+          </div>
+
+          {/* Page size selector */}
+            <div className="ml-4 flex items-center gap-2">
+              <label className="text-sm text-gray-600">Rows per page</label>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {[5, 10, 20, 50].map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+
         </div>
 
+        {/* Table */}
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Loan #</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Client</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Product</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Principal</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Balance</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Monthly</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLoans.map((loan) => (
-                  <tr key={loan.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium text-gray-900">{loan.loan_number}</td>
-                    <td className="py-3 px-4">
-                      {loan.clients ? (
-                        <div>
-                          <div className="font-medium text-gray-900">
-                            {loan.clients.first_name} {loan.clients.last_name}
-                          </div>
-                          <div className="text-xs text-gray-500">{loan.clients.client_number}</div>
-                        </div>
-                      ) : '-'}
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {loan.loan_products?.name || '-'}
-                    </td>
-                    <td className="py-3 px-4 text-gray-900 font-medium">
-                      {Math.round(loan.principal).toLocaleString()} CFA
-                    </td>
-                    <td className="py-3 px-4 text-gray-900">
-                      {Math.round(loan.outstanding_balance).toLocaleString()} CFA
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {Math.round(loan.monthly_payment).toLocaleString()} CFA
-                    </td>
-                    <td className="py-3 px-4">
-                      <LoanStatusBadge status={loan.status} />
-                    </td>
-                    <td className="py-3 px-4">
-                      <LoanActions
-                        loan={loan}
-                        onApprove={handleApprove}
-                        onReject={handleReject}
-                        onDisburse={handleDisburse}
-                        onPayment={handleRecordPayment}
-                      />
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Loan #</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Client</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Product</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Principal</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Balance</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Monthly</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {loans.map((loan) => (
+                    <tr key={loan.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 font-medium text-gray-900">{loan.loan_number}</td>
+                      <td className="py-3 px-4">
+                        {loan.clients ? (
+                          <div>
+                            <div className="font-medium text-gray-900">
+                              {loan.clients.first_name} {loan.clients.last_name}
+                            </div>
+                            <div className="text-xs text-gray-500">{loan.clients.client_number}</div>
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">{loan.loan_products?.name || '-'}</td>
+                      <td className="py-3 px-4 text-gray-900 font-medium">
+                        {Math.round(loan.principal).toLocaleString()} CFA
+                      </td>
+                      <td className="py-3 px-4 text-gray-900">
+                        {Math.round(loan.outstanding_balance).toLocaleString()} CFA
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">
+                        {Math.round(loan.monthly_payment).toLocaleString()} CFA
+                      </td>
+                      <td className="py-3 px-4">
+                        <LoanStatusBadge status={loan.status} />
+                      </td>
+                      <td className="py-3 px-4">
+                        <LoanActions
+                          loan={loan}
+                          onApprove={handleApprove}
+                          onReject={handleReject}
+                          onDisburse={handleDisburse}
+                          onPayment={handleRecordPayment}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-            {filteredLoans.length === 0 && (
-              <div className="text-center py-12">
-                <p className="text-gray-500">No loans found</p>
+              {loans.length === 0 && (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">No loans found</p>
+                </div>
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            {loans.length > 0 && (
+              <div className="flex items-center justify-between mt-4 px-4">
+                <p className="text-sm text-gray-600">
+                  Page {page} sur {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    ← Précédent
+                  </button>
+                  <button
+                    disabled={page === totalPages}
+                    onClick={() => setPage(page + 1)}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    Suivant →
+                  </button>
+                </div>
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
 
-      {showNewLoanModal && (
-        <NewLoanModal onClose={() => setShowNewLoanModal(false)} onSuccess={loadLoans} />
-      )}
-
+      {/* Modals */}
+      {showNewLoanModal && <NewLoanModal onClose={() => setShowNewLoanModal(false)} onSuccess={loadLoans} />}
       {showPaymentModal && selectedLoan && (
         <PaymentModal
           loan={selectedLoan}
@@ -262,7 +360,6 @@ export function LoanManagement() {
           onSuccess={loadLoans}
         />
       )}
-
       {showRejectModal && selectedLoan && (
         <RejectModal
           loan={selectedLoan}
@@ -273,6 +370,8 @@ export function LoanManagement() {
     </div>
   );
 }
+
+
 
 function StatCard({ label, value, icon: Icon, color }: any) {
   return (
