@@ -303,8 +303,8 @@ function StatusBadgeView({ value, type }: { value: string; type: 'client' | 'kyc
     color = value === 'Actif' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
   } else if (type === 'kyc') {
     if (value === 'verified') color = 'bg-green-100 text-green-800';
-    else if (value === 'Pending') color = 'bg-yellow-100 text-yellow-800';
-    else if (value === 'Rejected') color = 'bg-red-100 text-red-800';
+    else if (value === 'pending') color = 'bg-yellow-100 text-yellow-800';
+    else if (value === 'rejected') color = 'bg-red-100 text-red-800';
     else color = 'bg-gray-100 text-gray-700';
   }
 
