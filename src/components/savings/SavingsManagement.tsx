@@ -9,30 +9,54 @@ interface SavingsAccount {
   interest_earned: number;
   status: string;
   opened_date: string;
-  clients: { first_name: string; last_name: string; client_number: string };
-  savings_products: { name: string; interest_rate: number };
+  clients: { first_name: string; last_name: string; client_number: string } | null;
+  savings_products: { name: string; interest_rate: number } | null;
 }
 
 export function SavingsManagement() {
   const [accounts, setAccounts] = useState<SavingsAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
-  const [showNewAccountModal, setShowNewAccountModal] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<SavingsAccount | null>(null);
+  const [showNewAccountModal, setShowNewAccountModal] = useState(false);
 
   useEffect(() => {
     loadSavingsAccounts();
-  }, []);
+  }, [page]);
+
+  useEffect(() => {
+    setPage(1);
+    loadSavingsAccounts();
+  }, [searchQuery, pageSize]);
 
   const loadSavingsAccounts = async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('savings_accounts')
-        .select(`*, clients(first_name, last_name, client_number), savings_products(name, interest_rate)`)
-        .order('opened_date', { ascending: false });
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
 
+      let query = supabase
+      .from('vw_savings_accounts')
+      .select('*', { count: 'exact' })
+      .order('opened_date', { ascending: false })
+      .range(from, to);
+
+      if (searchQuery.trim() !== '') {
+        const q = `%${searchQuery.trim()}%`;
+        query = query.or(
+          `account_number.ilike.${q},clients->>first_name.ilike.${q},clients->>last_name.ilike.${q},clients->>client_number.ilike.${q},savings_products->>name.ilike.${q}`
+        );
+      }
+
+      const { data, error, count } = await query;
       if (error) throw error;
+      console.log('Fetched savings accounts:', data);
       setAccounts(data || []);
+      setTotalCount(typeof count === 'number' ? count : 0);
     } catch (error) {
       console.error('Error loading savings accounts:', error);
     } finally {
@@ -42,9 +66,11 @@ export function SavingsManagement() {
 
   const totalBalance = accounts.reduce((sum, acc) => sum + Number(acc.balance), 0);
   const totalInterest = accounts.reduce((sum, acc) => sum + Number(acc.interest_earned), 0);
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <div className="space-y-6">
+      {/* Header + stats */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Savings Management</h2>
@@ -54,11 +80,11 @@ export function SavingsManagement() {
           onClick={() => setShowNewAccountModal(true)}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
         >
-          <Plus className="w-5 h-5" />
-          New Account
+          <Plus className="w-5 h-5" /> New Account
         </button>
       </div>
 
+      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="bg-green-100 p-3 rounded-lg inline-block mb-4">
@@ -67,7 +93,6 @@ export function SavingsManagement() {
           <h3 className="text-gray-600 text-sm font-medium mb-1">Total Balance</h3>
           <p className="text-2xl font-bold text-gray-900">{Math.round(totalBalance).toLocaleString()} CFA</p>
         </div>
-
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="bg-blue-100 p-3 rounded-lg inline-block mb-4">
             <TrendingUp className="w-6 h-6 text-blue-600" />
@@ -75,7 +100,6 @@ export function SavingsManagement() {
           <h3 className="text-gray-600 text-sm font-medium mb-1">Total Interest Earned</h3>
           <p className="text-2xl font-bold text-gray-900">{Math.round(totalInterest).toLocaleString()} CFA</p>
         </div>
-
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
           <div className="bg-orange-100 p-3 rounded-lg inline-block mb-4">
             <Wallet className="w-6 h-6 text-orange-600" />
@@ -85,70 +109,121 @@ export function SavingsManagement() {
         </div>
       </div>
 
+      {/* Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Savings Accounts</h3>
+        {/* Recherche et page size */}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); }}
+            placeholder="Search by account, client or product..."
+            className="w-full md:w-1/3 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+
+          <div className="flex items-center gap-2">
+            <label className="text-gray-700 text-sm">Rows per page:</label>
+            <select
+              value={pageSize}
+              onChange={(e) => { setPageSize(Number(e.target.value)); }}
+              className="px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {[5, 10, 20, 50].map((size) => (
+                <option key={size} value={size}>{size}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Account #</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Client</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Product</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Balance</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Interest</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Rate</th>
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((account) => (
-                  <tr key={account.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium text-gray-900">{account.account_number}</td>
-                    <td className="py-3 px-4">
-                      <div className="font-medium text-gray-900">
-                        {account.clients.first_name} {account.clients.last_name}
-                      </div>
-                      <div className="text-xs text-gray-500">{account.clients.client_number}</div>
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">{account.savings_products.name}</td>
-                    <td className="py-3 px-4 font-semibold text-gray-900">
-                      {Math.round(Number(account.balance)).toLocaleString()} CFA
-                    </td>
-                    <td className="py-3 px-4 text-green-600">
-                      {Math.round(Number(account.interest_earned)).toLocaleString()} CFA
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">{account.savings_products.interest_rate}%</td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => { setSelectedAccount(account); setShowModal(true); }}
-                          className="flex items-center gap-1 px-3 py-1 text-sm bg-green-50 text-green-700 hover:bg-green-100 rounded-lg transition-colors"
-                        >
-                          <TrendingUp className="w-4 h-4" />
-                          Transaction
-                        </button>
-                      </div>
-                    </td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Account #</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Client</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Product</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Balance</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Interest</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Rate</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {accounts.map((account) => (
+                    <tr key={account.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-3 px-4 font-medium text-gray-900">{account.account_number}</td>
+                      <td className="py-3 px-4">
+                        <div className="font-medium text-gray-900">
+                          {account.clients?.first_name} {account.clients?.last_name}
+                        </div>
+                        <div className="text-xs text-gray-500">{account.clients?.client_number}</div>
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">{account.savings_products?.name}</td>
+                      <td className="py-3 px-4 font-semibold text-gray-900">
+                        {Math.round(Number(account.balance)).toLocaleString()} CFA
+                      </td>
+                      <td className="py-3 px-4 text-green-600">
+                        {Math.round(Number(account.interest_earned)).toLocaleString()} CFA
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">{account.savings_products?.interest_rate}%</td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setSelectedAccount(account); setShowModal(true); }}
+                            className="flex items-center gap-1 px-3 py-1 text-sm bg-green-50 text-green-700 hover:bg-green-100 rounded-lg transition-colors"
+                          >
+                            <TrendingUp className="w-4 h-4" />
+                            Transaction
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {accounts.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-gray-500">No savings accounts found</p>
               </div>
             )}
-          </div>
+
+            {/* Pagination Controls */}
+            {accounts.length > 0 && (
+              <div className="flex items-center justify-between mt-4 px-4">
+                <p className="text-sm text-gray-600">
+                  Page {page} sur {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage(page - 1)}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    ← Précédent
+                  </button>
+                  <button
+                    disabled={page === totalPages}
+                    onClick={() => setPage(page + 1)}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                  >
+                    Suivant →
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
+      {/* Modals */}
       {showModal && selectedAccount && (
         <TransactionModal
           account={selectedAccount}
@@ -156,7 +231,6 @@ export function SavingsManagement() {
           onSuccess={loadSavingsAccounts}
         />
       )}
-
       {showNewAccountModal && (
         <NewAccountModal
           onClose={() => setShowNewAccountModal(false)}

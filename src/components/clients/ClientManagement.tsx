@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { Plus, Search, CreditCard as Edit, Eye, CheckCircle, XCircle, Trash2, X } from 'lucide-react';
+import { User } from 'lucide-react';
 
 interface Client {
   id: string;
@@ -295,49 +296,221 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// Composant badge réutilisable
+function StatusBadgeView({ value, type }: { value: string; type: 'client' | 'kyc' }) {
+  let color = 'bg-gray-200 text-gray-700';
+  if (type === 'client') {
+    color = value === 'Actif' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800';
+  } else if (type === 'kyc') {
+    if (value === 'Verified') color = 'bg-green-100 text-green-800';
+    else if (value === 'Pending') color = 'bg-yellow-100 text-yellow-800';
+    else if (value === 'Rejected') color = 'bg-red-100 text-red-800';
+    else color = 'bg-gray-100 text-gray-700';
+  }
+
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${color}`}>
+      {value}
+    </span>
+  );
+}
+
+// Carte résumé client
+function ClientHeaderCard({ client }: { client: any }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm flex items-center gap-4 mb-6">
+      <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xl font-bold">
+        {client.photo_url ? (
+          <img
+            src={client.photo_url}
+            alt={`${client.first_name} ${client.last_name}`}
+            className="w-16 h-16 rounded-full object-cover"
+          />
+        ) : (
+          <User className="w-8 h-8" />
+        )}
+      </div>
+
+      <div className="flex-1">
+        <h2 className="text-lg font-bold text-gray-900">
+          {client.first_name} {client.last_name}
+        </h2>
+        <p className="text-sm text-gray-500">{client.client_number}</p>
+
+        <div className="flex gap-2 mt-2">
+          <StatusBadgeView
+            value={client.is_active ? 'Actif' : 'Inactif'}
+            type="client"
+          />
+          <StatusBadgeView
+            value={client.kyc_status || 'Non défini'}
+            type="kyc"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* Les modales AddClientModal, ViewClientModal, EditClientModal restent identiques à ton code existant */
 
 function ViewClientModal({ client, onClose }: { client: Client; onClose: () => void }) {
+  const [savingsAccounts, setSavingsAccounts] = useState<any[]>([]);
+  const [loans, setLoans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadClientData();
+  }, [client]);
+
+  const loadClientData = async () => {
+    setLoading(true);
+    try {
+      // Récupération des comptes d’épargne
+      const { data: savings, error: savingsError } = await supabase
+        .from('vw_savings_accounts')
+        .select('*')
+        .eq('client_id', client.id);
+
+      if (savingsError) throw savingsError;
+
+      // Récupération des prêts
+      const { data: loansData, error: loansError } = await supabase
+        .from('vw_loans')
+        .select('*')
+        .eq('client_id', client.id);
+
+      if (loansError) throw loansError;
+
+      setSavingsAccounts(savings || []);
+      setLoans(loansData || []);
+    } catch (error) {
+      console.error('Error loading client data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
         <div className="p-6 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-900">Client Details</h3>
+          <h3 className="text-xl font-bold text-gray-900">
+            Client Overview – {client.first_name} {client.last_name}
+          </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="w-6 h-6" />
           </button>
         </div>
-
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <InfoField label="Client Number" value={client.client_number} />
-            <InfoField label="Status" value={client.is_active ? 'Active' : 'Inactive'} />
-            <InfoField label="First Name" value={client.first_name} />
-            <InfoField label="Last Name" value={client.last_name} />
-            <InfoField label="Date of Birth" value={client.date_of_birth || '-'} />
-            <InfoField label="Gender" value={client.gender} />
-            <InfoField label="Phone" value={client.phone || '-'} />
-            <InfoField label="Email" value={client.email || '-'} />
-            <InfoField label="Address" value={client.address || '-'} />
-            <InfoField label="City" value={client.city || '-'} />
-            <InfoField label="Country" value={client.country || '-'} />
-            <InfoField label="Occupation" value={client.occupation || '-'} />
-            <InfoField label="ID Type" value={client.id_type || '-'} />
-            <InfoField label="ID Number" value={client.id_number || '-'} />
-            <InfoField label="KYC Status" value={client.kyc_status} />
-            <InfoField label="Created" value={new Date(client.created_at).toLocaleDateString()} />
+        
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
-        </div>
+        ) : (
+          <div className="p-6 space-y-8">
+            {/* Section 1 : Informations personnelles */}
+            <section>
+              <ClientHeaderCard client={client} />
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Informations du client</h4>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                
+                <InfoField label="Téléphone" value={client.phone || '-'} />
+                <InfoField label="Email" value={client.email || '-'} />
+                <InfoField label="Ville" value={client.city || '-'} />
+                <InfoField label="Pays" value={client.country || '-'} />
+                <InfoField label="Date de naissance" value={client.date_of_birth || '-'} />
+                <InfoField label="Genre" value={client.gender || '-'} />
+                <InfoField label="Profession" value={client.occupation || '-'} />
+                <InfoField label="Type ID" value={client.id_type || '-'} />
+                <InfoField label="N° ID" value={client.id_number || '-'} />
+              </div>
+            </section>
 
+            {/* Section 2 : Comptes d’épargne */}
+            <section>
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Comptes d’épargne</h4>
+              {savingsAccounts.length > 0 ? (
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left">#</th>
+                        <th className="px-4 py-2 text-left">Produit</th>
+                        <th className="px-4 py-2 text-left">N° Compte</th>
+                        <th className="px-4 py-2 text-left">Solde</th>
+                        <th className="px-4 py-2 text-left">Ouvert le</th>
+                        <th className="px-4 py-2 text-left">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savingsAccounts.map((acc, i) => (
+                        <tr key={acc.id} className="border-t hover:bg-gray-50">
+                          <td className="px-4 py-2">{i + 1}</td>
+                          <td className="px-4 py-2">{acc.savings_products?.name || '-'}</td>
+                          <td className="px-4 py-2 font-medium">{acc.account_number}</td>
+                          <td className="px-4 py-2">{acc.balance?.toLocaleString() || '0'}</td>
+                          <td className="px-4 py-2">{new Date(acc.opened_date).toLocaleDateString()}</td>
+                          <td className="px-4 py-2">{acc.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-gray-500 italic">Aucun compte d’épargne trouvé.</p>
+              )}
+            </section>
+
+            {/* Section 3 : Prêts */}
+            <section>
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">Prêts</h4>
+              {loans.length > 0 ? (
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left">#</th>
+                        <th className="px-4 py-2 text-left">Produit</th>
+                        <th className="px-4 py-2 text-left">Montant</th>
+                        <th className="px-4 py-2 text-left">Solde restant</th>
+                        <th className="px-4 py-2 text-left">Date de décaissement</th>
+                        <th className="px-4 py-2 text-left">État</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loans.map((loan, i) => (
+                        <tr key={loan.id} className="border-t hover:bg-gray-50">
+                          <td className="px-4 py-2">{i + 1}</td>
+                          <td className="px-4 py-2">{loan.loan_products?.name || '-'}</td>
+                          <td className="px-4 py-2">{loan.principal?.toLocaleString() || '-'}</td>
+                          <td className="px-4 py-2">{loan.outstanding_balance?.toLocaleString() || '-'}</td>
+                          <td className="px-4 py-2">{loan.disbursement_date ? new Date(loan.disbursement_date).toLocaleDateString() : '-'}</td>
+                          <td className="px-4 py-2">{loan.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-gray-500 italic">Aucun prêt trouvé.</p>
+              )}
+            </section>
+          </div>
+        )}
+
+        {/* Footer */}
         <div className="p-6 border-t border-gray-200 flex justify-end">
           <button onClick={onClose} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">
-            Close
+            Fermer
           </button>
         </div>
       </div>
     </div>
   );
 }
+
 
 function InfoField({ label, value }: { label: string; value: string }) {
   return (
